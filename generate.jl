@@ -2,17 +2,24 @@
 # Usage:  julia generate.jl [input.md]
 # Auto-fits: tries the largest text size that still yields exactly one page.
 
-@usingany Markdown
+# generate.jl — Markdown -> styled HTML -> one-page A3 portrait PDF
+# Usage:  julia generate.jl [input.md]
 
+using Markdown
+using Dates
 
 const INPUT = length(ARGS) >= 1 ? ARGS[1] : "Julia_Code_Organization_Cheat_Sheet.md"
 
+const VERSION_TAG = "v1.1"          # bump this on each release
+
+
 function css(root_pt)
     """
-    @page  { size: A3 portrait; margin: 6mm 16mm; }
+    @page  { size: A3 portrait; margin: 6mm 16mm 6mm; }
     *      { box-sizing: border-box; }
     html   { font-size: $(root_pt)pt; }
     body   { display: grid; grid-template-columns: 1fr 1fr;
+             align-items: start;
              gap: 1.4rem; font: 1rem/1.35 "Inter","Segoe UI",Arial,sans-serif;
              color: #1e293b; }
     h1     { grid-column: 1 / -1; font-size: 1.9rem; line-height: 1.1;
@@ -52,13 +59,9 @@ function css(root_pt)
              white-space: pre-wrap; break-inside: avoid; }
     code   { font-family: ui-monospace,Consolas,monospace; font-size: 0.89rem; }
 
-    /* box 0 pipeline banner: centered */
-    .panel:nth-of-type(1) pre:first-of-type { border: none; background: none;
-             text-align: center; font-weight: 600; font-size: 1rem;
-             margin: 0.2rem 0 0.4rem; }
-    /* box 7 resolution flow banner: left-justified */
+    .panel:nth-of-type(1) pre:first-of-type,
     .panel:nth-of-type(8) pre:last-of-type { border: none; background: none;
-             text-align: left; font-weight: 600; font-size: 1rem;
+             text-align: center; font-weight: 600; font-size: 1rem;
              margin: 0.2rem 0 0.4rem; }
 
     .panel:nth-of-type(4) pre { line-height: 1.15; }
@@ -71,11 +74,16 @@ function css(root_pt)
     blockquote { border-left: 3px solid #7c3aed; margin: 0.22rem 0;
                  padding: 0.17rem 0.32rem; break-inside: avoid; }
     hr     { display: none; }
+
+    .version { position: fixed; left: 0; right: 0; bottom: 0;
+               text-align: center; font-size: 0.78rem;
+               color: #64748b; margin: 0; }
     """
 end
 
 function write_html(header, panels, root_pt)
-    page = "<html><head><meta charset=\"utf-8\"><style>$(css(root_pt))</style></head>\n<body>\n$header\n$panels\n</body></html>"
+    stamp = "<p class=\"version\">$VERSION_TAG &#183; $(Dates.today())</p>"
+    page = "<html><head><meta charset=\"utf-8\"><style>$(css(root_pt))</style></head>\n<body>\n$header\n$panels\n$stamp\n</body></html>"
     write("cheatsheet.html", page)
     return abspath("cheatsheet.html")
 end
