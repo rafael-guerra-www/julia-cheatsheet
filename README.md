@@ -10,4 +10,40 @@ registries, package anatomy, and the Pkg REPL.
 * `generate.jl` — renders it to a one-page PDF (needs Julia + Chrome/Edge)
 * `cheatsheet.pdf` — not in the repo: regenerate it with `julia generate.jl`
 
-Feedback welcome via issues.
+## How to run
+
+Requirements:
+
+* [Julia](https://julialang.org/downloads/) 1.9 or later (uses the `Markdown` standard library, no packages to install)
+* Google Chrome or Microsoft Edge on Windows (headless Chrome is used to print the PDF)
+
+Usage, from the repo root:
+
+```bash
+julia generate.jl                      # uses Julia_Code_Organization_Cheat_Sheet.md
+julia generate.jl my_sheet.md         # render any other Markdown file
+```
+
+What it does:
+
+1. Parses the Markdown with Julia's built-in `Markdown` module.
+2. Wraps each `##` section in a styled, colored panel on a 2-column A3 grid.
+3. Tries font sizes from 11pt down to 6pt and keeps the largest one that fits on a single page.
+4. Prints the PDF via headless Chrome/Edge, writing `cheatsheet.pdf`.
+
+Outputs (both in the current directory, both git-ignored):
+
+* `cheatsheet.pdf` — the one-page A3 portrait PDF
+* `cheatsheet.html` — the intermediate HTML page, useful for quick preview in a browser
+
+To adapt the sheet, edit the `.md` file and re-run the script; the layout
+auto-fits the new content. The script currently locates Chrome/Edge via
+Windows paths; on Linux/macOS, adjust the `candidates` list in `main()`.
+
+## Feedback
+
+Corrections and suggestions welcome via [issues](https://github.com/rafael-guerra-www/julia-cheatsheet/issues).
+
+## License
+
+MIT
