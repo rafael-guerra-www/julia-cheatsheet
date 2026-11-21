@@ -47,3 +47,13 @@ Corrections and suggestions welcome via [issues](https://github.com/rafael-guerr
 ## License
 
 MIT
+
+## Acknowledgments
+
+This cheat sheet and its generation tooling (`generate.jl`, the Markdown
+source, the release workflow) were developed with the assistance of
+Mistral AI (Vibe, formerly Le Chat).
+
+All technical content was reviewed and validated by the author, and
+corrections from the community are incorporated through the
+[issue tracker](https://github.com/rafael-guerra-www/julia-cheatsheet/issues).

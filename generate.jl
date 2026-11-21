@@ -1,5 +1,6 @@
 # generate.jl — Markdown -> styled HTML -> one-page A3 portrait PDF
 # Usage:  julia generate.jl [input.md]
+# Developed with assistance from Mistral AI (Vibe)
 
 using Markdown
 using Dates
@@ -9,7 +10,7 @@ const SCRIPT_DIR = @__DIR__
 const INPUT = length(ARGS) >= 1 ? abspath(ARGS[1]) : joinpath(SCRIPT_DIR, "Julia_Code_Organization_Cheat_Sheet.md")
 const OUT_DIR = dirname(abspath(INPUT))
 const OPTIONS_FILE = joinpath(SCRIPT_DIR, "options.toml")
-const VERSION_TAG = "v1.2"          # bump this on each release
+const VERSION_TAG = "v1.3"          # bump this on each release
 
 const VARIANT_RE = r"<!--\s*variant:(\w+)\s*-->([\s\S]*?)<!--\s*variant:end\s*-->"
 
@@ -99,7 +100,7 @@ function css(root_pt)
 end
 
 function write_html(header, panels, root_pt, variant_label)
-    stamp = "<p class=\"version\">$VERSION_TAG$variant_label &#183; $(Dates.today())</p>"
+    stamp = "<p class=\"version\">$VERSION_TAG$variant_label &#183; $(Dates.today()) (prepared with Mistral AI assistance)</p>"
     page = "<html><head><meta charset=\"utf-8\"><style>$(css(root_pt))</style></head>\n<body>\n$header\n$panels\n$stamp\n</body></html>"
     write(joinpath(OUT_DIR, "cheatsheet.html"), page)
     return joinpath(OUT_DIR, "cheatsheet.html")
