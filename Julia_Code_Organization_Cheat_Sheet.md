@@ -1,5 +1,5 @@
 # Julia Code Organization — Technical Cheat Sheet
-*From process startup to code loading: editor, environments, projects, packages, modules, registries and the depot.*
+
 
 ## 0. How Julia finds code — load path resolution
 
@@ -27,7 +27,9 @@ The default stack:
 2. `@v#.#`
 3. `@stdlib`
 
-The first match wins. The stack can be overridden using `JULIA_LOAD_PATH`.
+The first match wins.
+
+**Beware of `JULIA_LOAD_PATH`**: changing this env var is discouraged — it replaces the managed loading path (`@`, `@v#.#`, `@stdlib`) and silently breaks Pkg resolution; reserve it for specialist setups (CI, isolated tests).
 
 `@v#.#` names the default env, one per Julia minor version (e.g. `v1.11`).
 Installing everything there is the classic novice mistake: expect version conflicts.
@@ -55,6 +57,7 @@ A global (`@v#.#`) tool environment stays visible everywhere without being a dep
 - Controlled by `JULIA_DEPOT_PATH`
 - Default location:  ~/.julia/
 - Contains: Packages, Development packages (`dev`), Environments, Artifacts
+- Also holds `config/startup.jl`, run at every Julia start: keep it minimal — a `cd()` or package loading there affects every script & tool (bypass with `julia --startup-file=no`).
 
 ### Registry
 
@@ -70,7 +73,12 @@ Registries can be public (General) or private.
 
   - Formatting, linting, tasks, debugging
 
-- The Julia extension runs `LanguageServer.jl` per folder. It automatically detects the nearest `Project.toml` by searching upward.
+<!-- variant:ls -->
+- **IDE support**: LanguageServer.jl — classic LSP, robust, works on all editors (VS Code, Neovim, Emacs, Sublime); the VS Code extension detects the nearest `Project.toml` by searching upward.
+<!-- variant:end -->
+<!-- variant:jetls -->
+- **IDE support**: JETLS.jl (JET team) — static analysis based on the compiler: typed diagnostics, macro-aware navigation; requires Julia ≥ 1.12.2 and an instantiated environment; installed as standalone executable (`Pkg.Apps.add`, then `jetls` in `~/.julia/bin`); native in Zed, `jetls-client` extension for VS Code.
+<!-- variant:end -->
 
 - `julia.environmentPath` pins the environment per folder when automatic detection chooses the wrong one.
 
@@ -89,7 +97,7 @@ Fix the environment, not the editor.
 - Use one workspace and one environment per project folder.
 - `launch.json` and tasks can pass `--project`.
 
-Other editors, all speak the same LanguageServer protocol:
+Other editors, all speak the same Language Server Protocol (LSP):
 
 - Emacs: `julia-snail` / `lsp-julia`
 - Vim: `nvim-lsp`
@@ -119,7 +127,7 @@ Both have a `Project.toml`, and can have a `Manifest.toml`. What differs is thei
 - Loadable with `using MyPkg`.
 - Versioned, registrable and testable.
 - Can be a dependency of other projects and packages.
-- Develop in place with; and test with:
+- Develop in place and test with:
 
   ```julia
   ] dev ./MyPkg
@@ -151,13 +159,15 @@ end
 - Modules are namespaces: they control name resolution, not dependencies or disk layout.
 - A package must expose a top-level module named like the package.
 - Scripts and applications do not need a module.
-- Modules outside packages are loaded with relative paths: `using .Helpers` (note leading dot)
+- Modules outside packages are loaded with relative paths: `using .Helpers` (note leading dot).
 - Submodules organize large packages: `module Internals ... end` inside the main module.
 ---
 
 ## 4. Public vs private registries
 
-Julia packages and registries — both public and private — make code reusable, reproducible, and manageable across projects and teams
+Julia packages and registries — both public and private — make code reusable, reproducible, and manageable across projects and teams.
+
+&nbsp;
 
 ### General registry (public)
 
@@ -189,7 +199,6 @@ MyPkg/
 ├── Project.toml       # name, uuid, deps, compat
 ├── Manifest.toml      # resolved lockfile (generated)
 ├── src/MyPkg.jl       # main module, name = package
-├── src/__init__.jl    # runs on first using
 ├── test/runtests.jl   # Pkg.test() entry point
 ├── docs/make.jl       # Documenter.jl
 └── ext/               # extensions via [weakdeps] (≥ 1.9)
@@ -213,8 +222,8 @@ MyPkg/
 
 ```bash
 julia --project=. run.jl       # run in this environment
-julia --project=@. -t auto     # nearest environment upward
-JULIA_DEPOT_PATH=... julia     # CI / relocatable depot
+julia --project=@. -t auto    # nearest environment upward
+JULIA_DEPOT_PATH=... julia    # CI / relocatable depot
 ```
 
 ### Pkg REPL

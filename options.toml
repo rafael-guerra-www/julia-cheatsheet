@@ -1,0 +1,2 @@
+# Cheat sheet generation options
+use_jetls = false   # true: the sheet recommends JETLS.jl instead of LanguageServer.jl

@@ -1,30 +1,47 @@
 # generate.jl — Markdown -> styled HTML -> one-page A3 portrait PDF
 # Usage:  julia generate.jl [input.md]
-# Auto-fits: tries the largest text size that still yields exactly one page.
-
-# generate.jl — Markdown -> styled HTML -> one-page A3 portrait PDF
-# Usage:  julia generate.jl [input.md]
 
 using Markdown
 using Dates
+using TOML
 
-const INPUT = length(ARGS) >= 1 ? ARGS[1] : "Julia_Code_Organization_Cheat_Sheet.md"
+const SCRIPT_DIR = @__DIR__
+const INPUT = length(ARGS) >= 1 ? abspath(ARGS[1]) : joinpath(SCRIPT_DIR, "Julia_Code_Organization_Cheat_Sheet.md")
+const OUT_DIR = dirname(abspath(INPUT))
+const OPTIONS_FILE = joinpath(SCRIPT_DIR, "options.toml")
+const VERSION_TAG = "v1.2"          # bump this on each release
 
-const VERSION_TAG = "v1.1"          # bump this on each release
+const VARIANT_RE = r"<!--\s*variant:(\w+)\s*-->([\s\S]*?)<!--\s*variant:end\s*-->"
 
+"""Keep only the `<!-- variant:NAME -->` blocks whose NAME == keep."""
+function select_variants(md::String, keep::String)
+    buf = IOBuffer()
+    pos = 1
+    n = lastindex(md)
+    for m in eachmatch(VARIANT_RE, md)
+        write(buf, md[pos:m.offset-1])
+        if m.captures[1] == keep
+            body = replace(m.captures[2], r"\A\r?\n" => "")
+            body = replace(body, r"\r?\n\z" => "")
+            write(buf, body, "\n")
+        end
+        pos = m.offset + sizeof(m.match)
+    end
+    pos <= n && write(buf, md[pos:end])
+    return String(take!(buf))
+end
 
 function css(root_pt)
     """
-    @page  { size: A3 portrait; margin: 6mm 16mm 6mm; }
+    @page  { size: A3 portrait; margin: 6mm 16mm 5mm; }
     *      { box-sizing: border-box; }
     html   { font-size: $(root_pt)pt; }
     body   { display: grid; grid-template-columns: 1fr 1fr;
-             align-items: start;
-             gap: 1.4rem; font: 1rem/1.35 "Inter","Segoe UI",Arial,sans-serif;
-             color: #1e293b; }
+             align-items: start; gap: 1.4rem;
+             padding-bottom: 6mm;
+             font: 1rem/1.35 "Inter","Segoe UI",Arial,sans-serif; color: #1e293b; }
     h1     { grid-column: 1 / -1; font-size: 1.9rem; line-height: 1.1;
              text-align: center; margin: 0; color: #0f172a; }
-    h1 + p { grid-column: 1 / -1; text-align: center; margin: 0 0 0.4rem; color: #475569; }
 
     .panel:nth-of-type(1) { grid-column: 1 / -1; columns: 2; column-gap: 1.4rem; }
     .panel:nth-of-type(8) { grid-column: 1 / -1; columns: 2; column-gap: 1.4rem; }
@@ -81,15 +98,15 @@ function css(root_pt)
     """
 end
 
-function write_html(header, panels, root_pt)
-    stamp = "<p class=\"version\">$VERSION_TAG &#183; $(Dates.today())</p>"
+function write_html(header, panels, root_pt, variant_label)
+    stamp = "<p class=\"version\">$VERSION_TAG$variant_label &#183; $(Dates.today())</p>"
     page = "<html><head><meta charset=\"utf-8\"><style>$(css(root_pt))</style></head>\n<body>\n$header\n$panels\n$stamp\n</body></html>"
-    write("cheatsheet.html", page)
-    return abspath("cheatsheet.html")
+    write(joinpath(OUT_DIR, "cheatsheet.html"), page)
+    return joinpath(OUT_DIR, "cheatsheet.html")
 end
 
 function print_pdf(browser, html_path)
-    pdf_path = abspath("cheatsheet.pdf")
+    pdf_path = joinpath(OUT_DIR, "cheatsheet.pdf")
     isfile(pdf_path) && rm(pdf_path)
     html_url = "file:///" * replace(html_path, "\\" => "/")
     profile_dir = joinpath(mktempdir(), "headless-profile")
@@ -110,8 +127,16 @@ function print_pdf(browser, html_path)
 end
 
 function main()
+    use_jetls = false
+    if isfile(OPTIONS_FILE)
+        opts = TOML.parsefile(OPTIONS_FILE)
+        use_jetls = Bool(get(opts, "use_jetls", false))
+    end
+    variant_label = use_jetls ? " &#183; JETLS variant" : ""
+
     mdtxt = read(INPUT, String)
     mdtxt = replace(mdtxt, "\r\n" => "\n")
+    mdtxt = select_variants(mdtxt, use_jetls ? "jetls" : "ls")
     html_body = Markdown.html(Markdown.parse(mdtxt))
     html_body = replace(html_body, "&amp;nbsp;" => "&#160;")
 
@@ -128,7 +153,7 @@ function main()
     ]
     browser = findfirst(isfile, candidates)
     if browser === nothing
-        write_html(header, panels, 9.0)
+        write_html(header, panels, 9.0, variant_label)
         run(`cmd /c start cheatsheet.html`)
         println("No Chrome/Edge found; opened cheatsheet.html in your default browser.")
         return
@@ -137,7 +162,7 @@ function main()
 
     println("Auto-fitting A3 portrait (trying 8.0pt down to 6.0pt)...")
     for root_pt in 8.0:-0.25:6.0
-        n_pages, pdf_path = print_pdf(b, write_html(header, panels, root_pt))
+        n_pages, pdf_path = print_pdf(b, write_html(header, panels, root_pt, variant_label))
         println("  root $(rpad(round(root_pt, digits=2), 5))pt -> $n_pages page(s)")
         if n_pages == 1
             println("OK: one-page A3 portrait at $(round(root_pt, digits=2))pt root size.")
@@ -149,4 +174,3 @@ function main()
 end
 
 main()
-
