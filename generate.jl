@@ -10,7 +10,7 @@ const SCRIPT_DIR = @__DIR__
 const INPUT = length(ARGS) >= 1 ? abspath(ARGS[1]) : joinpath(SCRIPT_DIR, "Julia_Code_Organization_Cheat_Sheet.md")
 const OUT_DIR = dirname(abspath(INPUT))
 const OPTIONS_FILE = joinpath(SCRIPT_DIR, "options.toml")
-const VERSION_TAG = "v1.4"          # bump this on each release
+const VERSION_TAG = "v1.5"          # bump this on each release
 
 const VARIANT_RE = r"<!--\s*variant:(\w+)\s*-->([\s\S]*?)<!--\s*variant:end\s*-->"
 
@@ -123,6 +123,38 @@ function print_pdf(browser, html_path)
     return count("/Type /Page", raw) - count("/Type /Pages", raw), pdf_path
 end
 
+"""Locate a headless-capable browser: Chrome/Edge on Windows, Chrome/Chromium/Edge on Unix."""
+function find_browser()
+    if Sys.iswindows()
+        candidates = [
+            raw"C:\Program Files\Google\Chrome\Application\chrome.exe",
+            raw"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            raw"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+            raw"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+        ]
+        i = findfirst(isfile, candidates)
+        return i === nothing ? nothing : candidates[i]
+    else
+        for exe in ("google-chrome", "google-chrome-stable", "chromium",
+                    "chromium-browser", "microsoft-edge")
+            path = Sys.which(exe)
+            path !== nothing && return path
+        end
+        return nothing
+    end
+end
+
+"""Open an HTML file in the platform default browser."""
+function open_html(html_path)
+    if Sys.iswindows()
+        run(`cmd /c start "" $html_path`)
+    elseif Sys.isapple()
+        run(`open $html_path`)
+    else
+        run(`xdg-open $html_path`)
+    end
+end
+
 function main()
     use_jetls = false
     if isfile(OPTIONS_FILE)
@@ -135,7 +167,7 @@ function main()
     mdtxt = replace(mdtxt, "\r\n" => "\n")
     mdtxt = select_variants(mdtxt, use_jetls ? "jetls" : "ls")
     html_body = Markdown.html(Markdown.parse(mdtxt))
-    html_body = replace(html_body, "&amp;nbsp;" => "&#160;")    # nbsp already there
+    html_body = replace(html_body, "&amp;nbsp;" => "&#160;")    # nbsp
     html_body = replace(html_body, "&amp;ensp;" => "&#8194;")   # half "em"
     html_body = replace(html_body, "&amp;emsp;"  => "&#8195;")  # full "em"
     html_body = replace(html_body, r"<p>\s*(?:&#160;|&nbsp;)\s*</p>" => "<p class=\"spacer\">&#160;</p>")
@@ -145,20 +177,17 @@ function main()
                    "</section>" for p in parts[2:end]), "\n")
     header = parts[1]
 
-    candidates = [
-        raw"C:\Program Files\Google\Chrome\Application\chrome.exe",
-        raw"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-        raw"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-        raw"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-    ]
-    browser = findfirst(isfile, candidates)
-    if browser === nothing
-        write_html(header, panels, 9.0, variant_label)
-        run(`cmd /c start cheatsheet.html`)
-        println("No Chrome/Edge found; opened cheatsheet.html in your default browser.")
+    b = find_browser()
+    if b === nothing
+        html_path = write_html(header, panels, 9.0, variant_label)
+        try
+            open_html(html_path)
+        catch
+            println("No browser command available; open $(html_path) manually.")
+        end
+        println("No Chrome/Chromium/Edge found; opened cheatsheet.html in your default browser.")
         return
     end
-    b = candidates[browser]
 
     println("Auto-fitting A3 portrait (trying 8.0pt down to 6.0pt)...")
     for root_pt in 8.0:-0.25:6.0
