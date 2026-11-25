@@ -1,69 +1,58 @@
 # Julia Code Organization — Technical Cheat Sheet
 
-
 ## 0. How Julia finds code — load path resolution
 
-The resolution pipeline:
+When `using` a package, the active environment's `LOAD_PATH` stack is searched for it, and the exact version is read from `Manifest.toml` (`Project.toml` lists the direct dependencies), and the code is loaded from the depot.
+The registry takes no part in loading: it is only consulted by Pkg operations (add, up) to decide which versions to install. Loading and installing are two different flows:
 
-```text
-Julia process  →  LOAD_PATH stack  →  Project.toml + Manifest.toml  →  Depot  →  Registry
-```
+**Load:**&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;LOAD_PATH stack → Project.toml + Manifest.toml → Depot
 
-### Julia process
+**Install:**&nbsp;&nbsp;&nbsp;Registry (name + UUID → versions) → Depot
 
-Example:
+&nbsp;
+### Julia process example
 
 ```bash
-julia --project=@. app.jl
+julia --project=@. app.jl      # '--project' sets the active environment
 ```
 
-`--project` sets the active environment.
+### LOAD_PATH default stack
 
-### LOAD_PATH environment stack
+&emsp;**1.** Active environment (`@`)&emsp;&emsp;**2.** `@v#.#`&emsp;&emsp;**3.** `@stdlib`
 
-The default stack:
+&nbsp;
 
-1. Active environment (`@`)
-2. `@v#.#`
-3. `@stdlib`
+The first match wins. Packages in `@v#.#` are visible to scripts and the REPL, but a package's own dependencies always resolve through its own Manifest.
 
-The first match wins.
+&nbsp;
 
-**Beware of `JULIA_LOAD_PATH`**: changing this env var is discouraged — it replaces the managed loading path (`@`, `@v#.#`, `@stdlib`) and silently breaks Pkg resolution; reserve it for specialist setups (CI, isolated tests).
+**Beware of `JULIA_LOAD_PATH`**: setting this env var replaces the managed loading path (`@`, `@v#.#`, `@stdlib`) — scripts may miss the active environment or `@stdlib`. Reserve it for specialist setups (CI, isolated tests).
 
-`@v#.#` names the default env, one per Julia minor version (e.g. `v1.11`).
-Installing everything there is the classic novice mistake: expect version conflicts.
+**`@v#.#`** names the default env, one per Julia minor version (e.g. `v1.11`).
+Installing everything there is the classic novice mistake: expect version conflicts, long precompile times and a slow-loading REPL.
 
 ### Project and Manifest
 
-- `Project.toml` declares dependencies.
-- `Manifest.toml` pins the resolved dependency graph.
+- `Project.toml` declares dependencies. `Manifest.toml` pins the resolved dependency graph.
+- Versioned names (`Manifest-v1.11.toml`) are preferred automatically since 1.10.8; `JuliaProject.toml` is also recognized.
 
-An **environment** is a folder with a Project.toml (Manifest optional).
-
-
-Activation examples:
+An **environment** is a folder with a Project.toml (Manifest optional). A global (`@v#.#`) tool environment stays visible everywhere without being a dependency. Activation examples:
 
 ```julia
-Pkg.activate(path)
-Pkg.activate("Name")       # named environment
-Pkg.activate(temp=true)    # temporary environment
+Pkg.activate(path)                    # explicit path
+Pkg.activate("Name"; shared=true)     # named shared env (~/.julia/environments/)
+Pkg.activate(temp=true)               # temporary environment
 ```
-
-A global (`@v#.#`) tool environment stays visible everywhere without being a dependency.
 
 ### Depot
 
-- Controlled by `JULIA_DEPOT_PATH`
-- Default location:  ~/.julia/
-- Contains: Packages, Development packages (`dev`), Environments, Artifacts
+- Controlled by `JULIA_DEPOT_PATH` (a stack; set before launch). Default location: `~/.julia/`
+- Contains: packages, registries, environments, artifacts, compiled caches, logs, scratch spaces
 - Also holds `config/startup.jl`, run at every Julia start: keep it minimal — a `cd()` or package loading there affects every script & tool (bypass with `julia --startup-file=no`).
 
 ### Registry
 
-Maps: name + UUID → repository, versions
-
-Registries can be public (General) or private.
+Registries can be public (General) or private. Maps: name + UUID → repository, versions
 
 ---
 
@@ -77,30 +66,28 @@ Registries can be public (General) or private.
 - **IDE support**: LanguageServer.jl — classic LSP, robust, works on all editors (VS Code, Neovim, Emacs, Sublime); the VS Code extension detects the nearest `Project.toml` by searching upward.
 <!-- variant:end -->
 <!-- variant:jetls -->
-- **IDE support**: JETLS.jl (JET team) — static analysis based on the compiler: typed diagnostics, macro-aware navigation; requires Julia ≥ 1.12.2 and an instantiated environment; installed as standalone executable (`Pkg.Apps.add`, then `jetls` in `~/.julia/bin`); native in Zed, `jetls-client` extension for VS Code.
+- **IDE support**: JETLS.jl (JET team) — static analysis based on the compiler: typed diagnostics, macro-aware navigation; requires Julia 1.12.2–1.14 and an instantiated environment; installed as standalone executable (`Pkg.Apps.add`, then `jetls` in `~/.julia/bin`; re-run after a Julia upgrade); native in Zed, `jetls-client` extension for VS Code.
 <!-- variant:end -->
 
-- `julia.environmentPath` pins the environment per folder when automatic detection chooses the wrong one.
+- `julia.environmentPath` pins the environment per folder when auto detection chooses the wrong one.
 
 - Completions, hover documentation and go-to-definition reflect the active environment's `Manifest.toml`, not the workspace itself.
-&nbsp;
+
 ### Key points
 
-The IDE never resolves dependencies. A wrong or inactive environment can cause:
-- Missing completions
-- False "missing reference" diagnostics
+The IDE never resolves dependencies. Fix the environment, not the editor. A wrong or inactive environment can cause: Missing completions; False "missing reference" diagnostics.
 
-Fix the environment, not the editor.
+&nbsp;
 
 **Tips:**
 
 - Use one workspace and one environment per project folder.
 - `launch.json` and tasks can pass `--project`.
 
-Other editors, all speak the same Language Server Protocol (LSP):
+Other editors all speak the same Language Server Protocol (LSP):
 
-- Emacs: `julia-snail` / `lsp-julia`
-- Vim: `nvim-lsp`
+- Emacs: `lsp-julia` / eglot (REPL support: `julia-snail`)
+- Neovim: built-in `vim.lsp.config` (≥ 0.11)
 
 ---
 
@@ -112,26 +99,23 @@ Both have a `Project.toml`, and can have a `Manifest.toml`. What differs is thei
 
 - Defines the dependency context for running scripts and applications.
 - No package identity (name and uuid) is needed for an ordinary application environment.
-- No src/ layout or package module is required.
-- Run with:
+- No src/ layout or package module is required. Cannot be registered or depended on by others. Run it with:
 
   ```bash
   julia --project=. run.jl
   ```
-
-- Cannot be registered or depended on by others.
+  In-script: `Pkg.activate(@__DIR__)`; `@main` (≥ 1.11) opts in to a Main.main(args) entry point.
 
 ### Package
 
-- A project with a UUID and a `src/MyPkg.jl` file defining the module named after the package.
-- Loadable with `using MyPkg`.
-- Versioned, registrable and testable.
+- A project with a name + UUID and a `src/MyPkg.jl` file defining the module named after the package.
+- Loadable with `using MyPkg`. Versioned, registrable and testable.
 - Can be a dependency of other projects and packages.
-- Develop in place and test with:
+- Develop against a consumer environment, not inside the package:
 
   ```julia
-  ] dev ./MyPkg
-  ] test
+  ] dev ./MyPkg     # in the app env: track local files
+  ] test            # inside the package: run its own tests, isolated
   ```
 
 **Every package is a project; not every project is a package.**
@@ -140,27 +124,27 @@ Both have a `Project.toml`, and can have a `Manifest.toml`. What differs is thei
 
 ## 3. Module system — language level
 
-Example module:
-
 ```julia
-module MyPkg
-using JSON                      # brings exported names in
-import JSON                     # module name only: JSON.write
-import JSON: write              # specific binding
-export myfunc
-include("helpers.jl")           # textual load into this module
+module MyPkg                   # Example module
+using JSON                     # brings exported names in
+import JSON                    # module name only: JSON.write
+import JSON: write             # specific binding
+export myfunc                  # makes myfunc available to callers without prefix
+include("helpers.jl")          # loads the file into this module
+using .Helpers                 # dot = module in scope, not a path
 myfunc(x) = ...
-function __init__() ... end     # runs once, at first load
+function __init__() ... end    # runs at each load, not during precompilation
 end
 ```
 
 ### Important points
 
-- Modules are namespaces: they control name resolution, not dependencies or disk layout.
+- Modules are namespaces controlling name resolution, not dependencies or disk layout.
 - A package must expose a top-level module named like the package.
 - Scripts and applications do not need a module.
-- Modules outside packages are loaded with relative paths: `using .Helpers` (note leading dot).
 - Submodules organize large packages: `module Internals ... end` inside the main module.
+- Load `using Revise` before `using MyPkg` to edit in place; it tracks code edits including structs (Julia ≥ 1.12), but not Project.toml changes — restart and `] resolve` after adding deps.
+
 ---
 
 ## 4. Public vs private registries
@@ -173,7 +157,7 @@ Julia packages and registries — both public and private — make code reusable
 
 - Default registry, served from `pkg.julialang.org`.
 - Maps name + UUID to Git repository and registered versions.
-- Public registration via Registrator / RegistryCI.
+- Registration via Registrator (bot); RegistryCI enforces General's checks on the PR.
 
 &nbsp;
 
@@ -181,7 +165,8 @@ Julia packages and registries — both public and private — make code reusable
 
 - Used for internal packages.
 - A registry is maintained as a Git repository.
-- It can optionally be served through a private package server.
+- Create and maintain one with LocalRegistry.jl; serve it via LocalPackageServer or a private Pkg server.
+- On the client side: `] registry add MyRegistry https://...` makes its packages resolvable everywhere — they install like General packages.
 
 &nbsp;
 
@@ -192,27 +177,25 @@ Versions registered in different registries are considered together during depen
 
 ## 5. Package anatomy
 
-Typical package structure:
-
 ```text
-MyPkg/
+MyPkg/                 # Typical package structure:
 ├── Project.toml       # name, uuid, deps, compat
 ├── Manifest.toml      # resolved lockfile (generated)
 ├── src/MyPkg.jl       # main module, name = package
 ├── test/runtests.jl   # Pkg.test() entry point
+├── examples/          # optional usage examples and data
 ├── docs/make.jl       # Documenter.jl
 └── ext/               # extensions via [weakdeps] (≥ 1.9)
 ```
 
-- `Project.toml`: hand-edited intent.
-- `Manifest.toml`: generated state.
+- `Project.toml`: hand-edited intent. `Manifest.toml`: generated state.
 - The main module must be named MyPkg in src/MyPkg.jl.
-- The uuid in Project.toml is the package's unique identity: assigned once.
-- [compat] records version bounds; missing it, the General registry rejects registration.
-- [extras] + [targets] declare test-only dependencies (e.g. Test) without adding them to [deps].
-- A package's Manifest.toml is usually not committed: the registry decides resolution.
-- Extensions in ext/ must be declared in [weakdeps], e.g. MyPkgX.jl.
-- Extensions are loaded only when the triggering package is present.
+- The name + uuid in Project.toml are the package's identity: assigned once.
+- [compat] bounds are required for every dependency and for julia itself — the General registry rejects registration otherwise.
+- Test dependencies: `test/Project.toml` (current) or [extras] + [targets] (legacy), without polluting [deps].
+- Apps commit their Manifest (exact reproducibility); packages usually don't — the registry decides resolution.
+- An extension pairs a [weakdeps] entry with an [extensions] entry: `ext/MyPkgFooExt.jl`.
+- Extensions load only when the triggering package is present.
 
 ---
 
@@ -221,29 +204,30 @@ MyPkg/
 ### Shell
 
 ```bash
-julia --project=. run.jl       # run in this environment
-julia --project=@. -t auto    # nearest environment upward
+julia script.jl               # runs in whatever environment is active
+julia --project=. run.jl      # use the project in the current directory
+julia --project=@script s.jl  # env next to the script (Julia ≥ 1.11)
 JULIA_DEPOT_PATH=... julia    # CI / relocatable depot
 ```
 
 ### Pkg REPL
 
-Enter Pkg mode by pressing `]`.
+Enter Pkg mode by pressing **`]`**
 
 ```julia
 activate .              # set folder as the active environment
 activate --shared dev   # named shared environment
 activate --temp         # throwaway environment for an experiment
-add Plots@1.40          # install from the registry, pin the version
-dev ./MyPkg             # install a working copy of another package
+add Plots@1.40          # install; spec [1.40, 2.0) — not a pin
+pin Plots               # pin the installed version: never auto-update
+dev ./MyPkg             # link env to local folder (edits take effect immediately); never `add` MyPkg
 free MyPkg              # undo pin / dev, back to normal
 instantiate             # install everything recorded in Manifest.toml
 up                      # upgrade packages to latest allowed versions
 resolve                 # update Manifest for a modified Project.toml
-test                    # run the tests of the active env's packages
+test                    # run the tests in an isolated process, no REPL restart
 precompile              # precompile the active environment
 status                  # show the environment's contents
-build MyPkg             # re-run a package's build step
 ```
 
 ---
@@ -254,18 +238,13 @@ build MyPkg             # re-run a package's build step
 - **Pkg Workspace** (v1.12+): multiple related projects under a root Project.toml, sharing one Manifest. Not the same as an editor workspace.
 - **Environment** = which package versions are available.
 - **Project** = the directory holding that context.
-- **Package** = project + UUID + main module.
+- **Package** = project + name + UUID + main module named after the package.
 - **Module** = namespace, inside or outside packages.
-- One depot serves many environments.
-- One environment can `dev` many packages.
+- Run scripts from a separate dev/scratch environment, never from the package's own environment: `add` there writes hard dependencies into its Project.toml, which breaks weak dependencies (extensions).
+- One depot serves many environments. One environment can `dev` many packages.
 - Registries only index; the depot stores.
 
+&nbsp;
 ### Overall picture
 
-This is **not a folder hierarchy**.
-
-A workspace may hold several environments, packages, applications and scripts. The resolution flow is:
-
-```text
-LOAD_PATH → Project.toml → Manifest.toml → Depot
-```
+The workspace is **not a folder hierarchy**: it may hold several environments, packages, applications and scripts. The resolution flow is: &nbsp;&nbsp;&nbsp;LOAD_PATH → Project.toml → Manifest.toml → Depot

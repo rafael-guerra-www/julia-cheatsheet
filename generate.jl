@@ -10,7 +10,7 @@ const SCRIPT_DIR = @__DIR__
 const INPUT = length(ARGS) >= 1 ? abspath(ARGS[1]) : joinpath(SCRIPT_DIR, "Julia_Code_Organization_Cheat_Sheet.md")
 const OUT_DIR = dirname(abspath(INPUT))
 const OPTIONS_FILE = joinpath(SCRIPT_DIR, "options.toml")
-const VERSION_TAG = "v1.3"          # bump this on each release
+const VERSION_TAG = "v1.4"          # bump this on each release
 
 const VARIANT_RE = r"<!--\s*variant:(\w+)\s*-->([\s\S]*?)<!--\s*variant:end\s*-->"
 
@@ -70,17 +70,13 @@ function css(root_pt)
     h3     { font-size: 1.11rem; margin: 0.28rem 0 0.1rem; color: #0369a1; break-after: avoid; }
     ul     { padding-left: 1.4rem; margin: 0.1rem 0; }
     li     { margin: 0.07rem 0; }
-    p      { margin: 0.17rem 0; break-inside: avoid; }
+    p      { margin: 0.15rem 0; break-inside: avoid; }
+    p.spacer { line-height: 0.85; font-size: 0.6rem; margin: 0.1rem 0; }
 
     pre    { background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px;
              font: 0.83rem/1.3 ui-monospace,Consolas,monospace; padding: 0.47rem;
              white-space: pre-wrap; break-inside: avoid; }
     code   { font-family: ui-monospace,Consolas,monospace; font-size: 0.89rem; }
-
-    .panel:nth-of-type(1) pre:first-of-type,
-    .panel:nth-of-type(8) pre:last-of-type { border: none; background: none;
-             text-align: center; font-weight: 600; font-size: 1rem;
-             margin: 0.2rem 0 0.4rem; }
 
     .panel:nth-of-type(4) pre { line-height: 1.15; }
     .panel:nth-of-type(7) pre:last-of-type { white-space: pre; overflow: hidden;
@@ -139,7 +135,10 @@ function main()
     mdtxt = replace(mdtxt, "\r\n" => "\n")
     mdtxt = select_variants(mdtxt, use_jetls ? "jetls" : "ls")
     html_body = Markdown.html(Markdown.parse(mdtxt))
-    html_body = replace(html_body, "&amp;nbsp;" => "&#160;")
+    html_body = replace(html_body, "&amp;nbsp;" => "&#160;")    # nbsp already there
+    html_body = replace(html_body, "&amp;ensp;" => "&#8194;")   # half "em"
+    html_body = replace(html_body, "&amp;emsp;"  => "&#8195;")  # full "em"
+    html_body = replace(html_body, r"<p>\s*(?:&#160;|&nbsp;)\s*</p>" => "<p class=\"spacer\">&#160;</p>")
 
     parts = split(html_body, r"<h2>")
     panels = join(("<section class=\"panel\"><h2>" * strip(p, ['\n', '\r', ' ']) *
